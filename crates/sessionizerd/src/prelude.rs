@@ -1,1 +1,1 @@
-pub use color_eyre::eyre::Result;
+pub use color_eyre::eyre::{eyre, Result};
