@@ -51,14 +51,12 @@ async fn main() -> Result<()> {
     loop {
         match listener_delete_on_drop.listener.accept().await {
             Ok((stream, _)) => {
-                log::info!("New connection");
-                let handle = tokio::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(e) = handle_client(stream).await {
                         log::error!("Error handling client: {:?}", e);
                     }
-                });
-
-                handle.await.unwrap();
+                })
+                .await?;
             }
             Err(e) => {
                 log::error!("Error accepting connection: {:?}", e);
@@ -94,8 +92,18 @@ async fn handle_client(mut stream: UnixStream) -> Result<()> {
     match request.event.as_str() {
         "ping" => pong(stream).await,
         "server::list" => {
-            let request = serde_json::from_slice::<Request<events::server::List>>(&buf[..n])?;
-            crate::server::list(stream, request).await
+            crate::server::list(
+                stream,
+                serde_json::from_slice::<Request<events::server::List>>(&buf[..n])?,
+            )
+            .await
+        }
+        "server::create" => {
+            crate::server::create(
+                stream,
+                serde_json::from_slice::<Request<events::server::Create>>(&buf[..n])?,
+            )
+            .await
         }
         _ => unknown(stream).await,
     }?;

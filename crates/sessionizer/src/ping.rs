@@ -14,14 +14,9 @@ pub async fn run(mut stream: UnixStream) -> Result<()> {
 
     let n = stream.read(&mut buf).await?;
 
-    let response: Response<()> = serde_json::from_slice(&buf[..n]).unwrap();
+    let _: Response<()> = serde_json::from_slice(&buf[..n]).unwrap();
 
-    // Handle the response
-    match response.event.as_str() {
-        "pong" => println!("Received pong from server"),
-        "error" => println!("Received error from server"),
-        _ => println!("Received unknown event from server"),
-    }
+    println!("pong");
 
     Ok(())
 }
