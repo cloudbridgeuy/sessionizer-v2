@@ -1,21 +1,12 @@
 use clap::Parser;
-use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
+
+use events::{Request, Response};
 
 mod prelude;
 
 use crate::prelude::*;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Request {
-    event: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Response {
-    event: String,
-}
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]

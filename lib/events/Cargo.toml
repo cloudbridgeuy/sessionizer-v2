@@ -1,0 +1,16 @@
+[package]
+name = "events"
+version = "0.0.0"
+description = "Sessionizer shared events library"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/cloudbridgeuy/sessionizer-v2/tree/main/lib/events"
+edition = "2021"
+keywords = ["events"]
+
+[lib]
+name = "events"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }

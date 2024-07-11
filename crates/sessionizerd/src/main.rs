@@ -1,8 +1,9 @@
 use clap::Parser;
-use serde::{Deserialize, Serialize};
 use std::io;
 use tokio::io::AsyncWriteExt;
 use tokio::net::{UnixListener, UnixStream};
+
+use events::{Request, Response};
 
 mod prelude;
 
@@ -52,28 +53,6 @@ async fn main() -> Result<()> {
                 log::error!("Error accepting connection: {:?}", e);
             }
         }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Request {
-    event: String,
-}
-
-impl std::fmt::Display for Request {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Response {
-    event: String,
-}
-
-impl std::fmt::Display for Response {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
     }
 }
 
