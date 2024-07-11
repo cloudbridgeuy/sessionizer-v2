@@ -1,11 +1,12 @@
 use clap::Parser;
-use std::io;
-use tokio::io::AsyncWriteExt;
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 
 use events::{Request, Response};
 
 mod prelude;
+mod server;
 
 use crate::prelude::*;
 
@@ -15,6 +16,11 @@ pub struct Args {
     /// Path where the Socket file will be created to store the daemon socket.
     #[arg(long, default_value = "/tmp/sessionizerd.sock")]
     socket_file: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Event {
+    event: String,
 }
 
 #[tokio::main]
@@ -43,11 +49,16 @@ async fn main() -> Result<()> {
     let listener_delete_on_drop = UnixListenerDeleteOnDrop::new(socket_file, listener);
 
     loop {
-        log::info!("Waiting for incoming connections...");
         match listener_delete_on_drop.listener.accept().await {
-            Ok((stream, addr)) => {
-                log::info!("New connection: {:?} - {:?}", stream, addr);
-                tokio::spawn(handle_client(stream));
+            Ok((stream, _)) => {
+                log::info!("New connection");
+                let handle = tokio::spawn(async move {
+                    if let Err(e) = handle_client(stream).await {
+                        log::error!("Error handling client: {:?}", e);
+                    }
+                });
+
+                handle.await.unwrap();
             }
             Err(e) => {
                 log::error!("Error accepting connection: {:?}", e);
@@ -74,38 +85,38 @@ impl Drop for UnixListenerDeleteOnDrop {
 }
 
 async fn handle_client(mut stream: UnixStream) -> Result<()> {
-    let mut msg = vec![0; 1024];
+    let mut buf = vec![0; 1024];
+    let n = stream.read(&mut buf).await?;
+    let request = serde_json::from_slice::<Event>(&buf[..n])?;
 
-    stream.readable().await?;
-
-    loop {
-        match stream.try_read(&mut msg) {
-            Ok(n) => {
-                msg.truncate(n);
-                break;
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-            Err(e) => return Err(e.into()),
-        }
-    }
-
-    let request = serde_json::from_slice::<Request>(&msg)?;
-    log::info!("request: {}", request);
+    log::info!("event: {}", request.event);
 
     match request.event.as_str() {
-        "ping" => {
-            let response = serde_json::to_string(&Response {
-                event: "pong".to_string(),
-            })?;
-            stream.write_all(response.as_bytes()).await?;
+        "ping" => pong(stream).await,
+        "server::list" => {
+            let request = serde_json::from_slice::<Request<events::server::List>>(&buf[..n])?;
+            crate::server::list(stream, request).await
         }
-        _ => {
-            let response = serde_json::to_string(&Request {
-                event: "error".to_string(),
-            })?;
-            stream.write_all(response.as_bytes()).await?;
-        }
-    }
+        _ => unknown(stream).await,
+    }?;
 
+    Ok(())
+}
+
+async fn unknown(mut stream: UnixStream) -> Result<()> {
+    let response = serde_json::to_string(&Request::<()> {
+        event: "error".to_string(),
+        payload: None,
+    })?;
+    stream.write_all(response.as_bytes()).await?;
+    Ok(())
+}
+
+async fn pong(mut stream: UnixStream) -> Result<()> {
+    let response = serde_json::to_string(&Response::<()> {
+        event: "pong".to_string(),
+        payload: None,
+    })?;
+    stream.write_all(response.as_bytes()).await?;
     Ok(())
 }

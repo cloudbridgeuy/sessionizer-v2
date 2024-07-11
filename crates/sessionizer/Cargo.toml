@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 events = { version = "0.0.0", path = "../../lib/events" }
 tokio = { workspace = true, features = ["full"] }
-clap = { workspace = true, features = ["derive", "string"] }
+clap = { workspace = true, features = ["derive", "string", "env"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 color-eyre = { workspace = true }
