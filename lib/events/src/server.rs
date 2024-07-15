@@ -11,3 +11,9 @@ pub struct Create {
     pub name: String,
     pub recreate: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Switch {
+    pub user_id: Option<u32>,
+    pub name: String,
+}

@@ -1,8 +1,4 @@
 use clap::{Parser, Subcommand};
-use events::Response;
-use serde_json::json;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::UnixStream;
 
 use crate::prelude::*;
 
@@ -18,67 +14,71 @@ pub enum Command {
     /// Get a list of all the running TMUX servers.
     #[clap(name = "list")]
     List,
-    /// Create a new TMUX server.
-    #[clap(name = "create")]
-    Create(CreateOptions),
+    /// Attaches to a session on a TMUX server, creating both if necessary.
+    #[clap(name = "attach")]
+    Attach(AttachOptions),
+    /// Detaches from the current TMUX server.
+    #[clap(name = "detach")]
+    Detach,
 }
 
 #[derive(Debug, Parser)]
-pub struct CreateOptions {
+pub struct AttachOptions {
     /// Name of the TMUX server.
-    name: String,
+    #[clap(default_value = "default")]
+    server_name: String,
     /// Recreate the server if it already exists.
     #[clap(long)]
     recreate: bool,
+    /// Session name defined as a filesystem directory.
+    #[clap(short, long, default_value = get_cwd())]
+    session: String,
 }
 
-pub async fn run(stream: UnixStream, app: App, global: crate::Global) -> Result<()> {
+/// Gets the current working directory as a String, or empty if an error occurs.
+fn get_cwd() -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_default()
+}
+
+pub fn run(app: App, globals: crate::Globals) -> Result<()> {
     match app.command {
-        Command::List => list(stream, global).await,
-        Command::Create(options) => create(stream, global, options).await,
+        Command::List => list(globals),
+        Command::Detach => detach(),
+        Command::Attach(options) => attach(options),
     }
 }
 
-async fn list(mut stream: UnixStream, global: crate::Global) -> Result<()> {
-    let request = json!({
-        "event": "server::list",
-        "payload": {"user_id": global.user_id},
-    });
+#[derive(Debug, Parser)]
+pub struct SwitchOptions {
+    /// Name of the TMUX server.
+    name: String,
+}
 
-    stream.write_all(request.to_string().as_bytes()).await?;
+fn detach() -> Result<()> {
+    crate::tmux::server::detach()
+}
 
-    let mut buf = vec![0; 1024];
-    let n = stream.read(&mut buf).await?;
-    let response: Response<events::misc::Lines> = serde_json::from_slice(&buf[..n])?;
+fn list(globals: crate::Globals) -> Result<()> {
+    let folder_path = format!("/tmp/tmux-{}", globals.user_id);
+    if std::fs::metadata(&folder_path).is_err() {
+        std::fs::create_dir(&folder_path)?;
+    };
 
-    let lines = response.payload.unwrap();
-
-    for line in lines {
-        println!("{}", line);
+    for entry in std::fs::read_dir(folder_path)? {
+        let entry = entry?;
+        if let Some(file_name) = entry.file_name().to_str() {
+            println!("{}", file_name);
+        }
     }
 
     Ok(())
 }
 
-async fn create(
-    mut stream: UnixStream,
-    global: crate::Global,
-    options: CreateOptions,
-) -> Result<()> {
-    let request = json!({
-        "event": "server::create",
-        "payload": {
-            "user_id": global.user_id,
-            "name": options.name,
-            "recreate": options.recreate,
-        },
-    });
-
-    stream.write_all(request.to_string().as_bytes()).await?;
-
-    let mut buf = vec![0; 1024];
-    let n = stream.read(&mut buf).await?;
-    let _: Response<events::misc::Lines> = serde_json::from_slice(&buf[..n])?;
+fn attach(options: AttachOptions) -> Result<()> {
+    crate::tmux::server::create(&options.server_name, options.session, options.recreate)?;
 
     Ok(())
 }
